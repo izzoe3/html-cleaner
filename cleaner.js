@@ -1,399 +1,200 @@
-// ─────────────────────────────────────────────────
-// State
-// ─────────────────────────────────────────────────
-let allowedAttrs = ['href','src','alt','title','width','height','target','rel','colspan','rowspan'];
-let liveMode = true;
-let debounceTimer = null;
-let htmlSyncTimer = null;
+'use strict';
+// HTML cleaning engine. Does not depend on CKEditor.
+const Cleaner = (() => {
+  const structuralAttrs = new Set(['colspan', 'rowspan', 'scope', 'headers']);
+  const forbiddenTags = new Set(['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'meta', 'link', 'base', 'svg', 'math', 'template']);
+  const dangerousUrl = /^\s*(?:javascript|vbscript|data):/i;
+  const emptyBlockTags = 'p,div,h1,h2,h3,h4,h5,h6';
 
-// ─────────────────────────────────────────────────
-// Boot
-// ─────────────────────────────────────────────────
-renderAttrChips();
-document.getElementById('attrMode').addEventListener('change', updateAttrUI);
-document.getElementById('attrInput').addEventListener('keydown', e => { if (e.key === 'Enter') addAttr(); });
-updateAttrUI();
-
-const editor     = document.getElementById('editor');
-const htmlSource = document.getElementById('htmlSource');
-
-editor.addEventListener('input', onEditorChange);
-htmlSource.addEventListener('input', onHtmlSourceChange);
-document.addEventListener('selectionchange', updateToolbarState);
-
-// Switch back to live mode on next WYSIWYG keystroke or paste
-editor.addEventListener('keydown', () => { liveMode = true; });
-editor.addEventListener('paste',   () => { setTimeout(() => { liveMode = true; showRawHTML(); }, 50); });
-
-// ─────────────────────────────────────────────────
-// Editor → HTML source  (left → right, live)
-// ─────────────────────────────────────────────────
-function onEditorChange() {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    if (liveMode) showRawHTML();
-    updateWordCount();
-  }, 80);
-}
-
-function showRawHTML() {
-  const raw        = editor.innerHTML || '';
-  const prettyPrint = document.getElementById('prettyPrint').checked;
-  const display    = prettyPrint ? prettyHTML(raw) : raw;
-  htmlSource.value = display;
-  updateLineCount(display);
-  document.getElementById('statRaw').textContent     = raw.length + ' ch';
-  document.getElementById('statCleaned').textContent = '—';
-  document.getElementById('statRed').textContent     = '—';
-  document.getElementById('modeTag').textContent     = 'live preview';
-}
-
-// ─────────────────────────────────────────────────
-// HTML source → WYSIWYG  (right → left, on edit)
-// ─────────────────────────────────────────────────
-function onHtmlSourceChange() {
-  liveMode = false;
-  clearTimeout(htmlSyncTimer);
-  htmlSyncTimer = setTimeout(() => {
-    const html       = htmlSource.value;
-    editor.innerHTML = html;
-    updateWordCount();
-    updateLineCount(html);
-    document.getElementById('modeTag').textContent = 'html edited';
-    setTimeout(() => { liveMode = true; }, 300);
-  }, 400);
-}
-
-// ─────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────
-function updateWordCount() {
-  const text  = editor.innerText || '';
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
-  document.getElementById('wordCount').textContent = words + ' words';
-}
-
-function updateLineCount(text) {
-  const lines = (text.match(/\n/g) || []).length + 1;
-  document.getElementById('lineCount').textContent = lines + ' lines';
-}
-
-// ─────────────────────────────────────────────────
-// Clean button
-// ─────────────────────────────────────────────────
-function runClean() {
-  const rawHTML = editor.innerHTML || '';
-  if (!rawHTML.trim()) return;
-
-  const cleaned     = cleanHTML(rawHTML);
-  editor.innerHTML  = cleaned;
-
-  const prettyPrint = document.getElementById('prettyPrint').checked;
-  const out         = prettyPrint ? prettyHTML(cleaned) : cleaned;
-
-  htmlSource.value  = out;
-  updateLineCount(out);
-
-  const rawLen = rawHTML.length;
-  const outLen = out.length;
-  const pct    = rawLen > 0 ? Math.round((1 - outLen / rawLen) * 100) : 0;
-
-  document.getElementById('statRaw').textContent     = rawLen.toLocaleString() + ' ch';
-  document.getElementById('statCleaned').textContent = outLen.toLocaleString() + ' ch';
-  document.getElementById('statRed').textContent     = pct + '%';
-  document.getElementById('modeTag').textContent     = '✓ cleaned';
-  updateWordCount();
-
-  liveMode = false;
-}
-
-// ─────────────────────────────────────────────────
-// Core HTML cleaner
-// ─────────────────────────────────────────────────
-function cleanHTML(html) {
-  const attrMode       = document.getElementById('attrMode').value;
-  const stripMso       = document.getElementById('stripMso').checked;
-  const stripClass     = document.getElementById('stripClass').checked;
-  const stripStyle     = document.getElementById('stripStyle').checked;
-  const collapseEmpty  = document.getElementById('collapseEmpty').checked;
-  const semanticTags   = document.getElementById('semanticTags').checked;
-  const removeComments = document.getElementById('removeComments').checked;
-  const removeEvents   = document.getElementById('removeEvents').checked;
-  const removeData     = document.getElementById('removeData').checked;
-  const unwrapDivSpan  = document.getElementById('unwrapDivSpan').checked;
-
-  const parser = new DOMParser();
-  const doc    = parser.parseFromString(html, 'text/html');
-  const root   = doc.body;
-
-  // ── Remove HTML comments ──────────────────────
-  if (removeComments) {
-    const iter  = document.createNodeIterator(root, NodeFilter.SHOW_COMMENT);
-    const nodes = [];
-    let n;
-    while ((n = iter.nextNode())) nodes.push(n);
-    nodes.forEach(c => c.parentNode && c.parentNode.removeChild(c));
+  function optionsFromUI(allowedAttrs) {
+    const get = id => document.getElementById(id).checked;
+    return {
+      attrMode: document.getElementById('attrMode').value,
+      allowedAttrs: new Set(allowedAttrs.map(a => a.toLowerCase())),
+      stripMso: get('stripMso'), stripClass: get('stripClass'),
+      stripStyle: get('stripStyle'), collapseEmpty: get('collapseEmpty'),
+      unwrapDivSpan: get('unwrapDivSpan'), semanticTags: get('semanticTags'),
+      removeComments: get('removeComments'), removeData: get('removeData')
+    };
   }
 
-  // Formatting tags — never remove or strip content from these
-  const FORMATTING_TAGS = new Set([
-    'strong','em','u','s','strike','ins','del','mark','sub','sup','code','b','i'
-  ]);
-
-  // ── Rescue inline-style formatting (Google Docs pattern) ──
-  // Runs BEFORE style stripping so bold/italic/underline survive
-  if (semanticTags) {
-    root.querySelectorAll('[style]').forEach(el => {
-      const style      = el.getAttribute('style') || '';
-      const isBold      = /font-weight\s*:\s*(bold|700|800|900)/i.test(style);
-      const isItalic    = /font-style\s*:\s*italic/i.test(style);
-      const isUnderline = /text-decoration\s*:[^;]*underline/i.test(style);
-      const isStrike    = /text-decoration\s*:[^;]*line-through/i.test(style);
-
-      const wrapWith = (tagName) => {
-        const wrapper = doc.createElement(tagName);
-        while (el.firstChild) wrapper.appendChild(el.firstChild);
-        el.appendChild(wrapper);
-      };
-
-      if (isStrike)    wrapWith('s');
-      if (isUnderline) wrapWith('u');
-      if (isItalic)    wrapWith('em');
-      if (isBold)      wrapWith('strong');
-
-      // Strip the now-redundant formatting properties from the style
-      const cleaned = style
-        .split(';')
-        .filter(r => {
-          const rule = r.trim().toLowerCase();
-          return !/^font-weight/.test(rule)
-              && !/^font-style/.test(rule)
-              && !/^text-decoration/.test(rule);
-        })
-        .join(';')
-        .trim();
-      cleaned ? el.setAttribute('style', cleaned) : el.removeAttribute('style');
-    });
-
-    root.querySelectorAll('b').forEach(el => swapTag(el, 'strong', doc));
-    root.querySelectorAll('i').forEach(el => swapTag(el, 'em', doc));
+  function replaceTag(element, tagName, doc) {
+    const replacement = doc.createElement(tagName);
+    for (const attr of Array.from(element.attributes)) replacement.setAttribute(attr.name, attr.value);
+    while (element.firstChild) replacement.appendChild(element.firstChild);
+    element.replaceWith(replacement);
+    return replacement;
   }
 
-  // ── Unwrap <div> and <span> (keep children) ──
-  if (unwrapDivSpan) {
-    Array.from(root.querySelectorAll('div, span')).reverse().forEach(el => {
-      const parent = el.parentNode;
-      if (!parent) return;
-      while (el.firstChild) parent.insertBefore(el.firstChild, el);
-      parent.removeChild(el);
-    });
+  function unwrap(element) {
+    element.replaceWith(...Array.from(element.childNodes));
   }
 
-  // ── Per-element attribute cleanup ─────────────
-  root.querySelectorAll('*').forEach(el => {
-    const tagName     = el.tagName.toLowerCase();
-    const isFormatting = FORMATTING_TAGS.has(tagName);
-
-    // Strip mso-* rules from style attribute
-    if (stripMso && el.hasAttribute('style')) {
-      const cleanedStyle = el.getAttribute('style')
-        .split(';')
-        .filter(r => r.trim() && !r.trim().toLowerCase().startsWith('mso-'))
-        .join(';').trim();
-      cleanedStyle ? el.setAttribute('style', cleanedStyle) : el.removeAttribute('style');
-    }
-
-    Array.from(el.attributes).map(a => a.name).forEach(attr => {
-      const a      = attr.toLowerCase();
-      let remove   = false;
-
-      if (!isFormatting) {
-        if      (attrMode === 'remove-all') remove = true;
-        else if (attrMode === 'allowlist')  remove = !allowedAttrs.includes(a);
-        else if (attrMode === 'blocklist')  remove = allowedAttrs.includes(a);
+  // CKEditor 5 uses <figure class="table"> around editable tables. This is
+  // editor UI structure, not required for WordPress output. Leave other
+  // figures (especially figures containing images/captions) untouched.
+  function unwrapTableFigures(input) {
+    const doc = new DOMParser().parseFromString(input || '', 'text/html');
+    doc.body.querySelectorAll('figure.table').forEach(figure => {
+      const children = Array.from(figure.children);
+      const table = children.find(el => el.tagName.toLowerCase() === 'table');
+      if (!table) return;
+      const caption = children.find(el => el.tagName.toLowerCase() === 'figcaption');
+      if (caption && caption.textContent.trim() && !table.querySelector('caption')) {
+        const tableCaption = doc.createElement('caption');
+        tableCaption.textContent = caption.textContent;
+        table.prepend(tableCaption);
       }
-
-      if (stripClass && a === 'class')           remove = true;
-      if (stripStyle && a === 'style')           remove = true;
-      if (removeEvents && a.startsWith('on'))    remove = true;
-      if (removeData   && a.startsWith('data-')) remove = true;
-
-      if (remove) el.removeAttribute(attr);
+      // Do not silently discard other content inside a nonstandard figure.
+      const extras = children.filter(el => el !== table && el !== caption);
+      if (extras.length) return;
+      figure.replaceWith(table);
     });
-  });
+    return doc.body.innerHTML.trim();
+  }
 
-  // ── Remove empty block elements ───────────────
-  if (collapseEmpty) {
-    let changed = true;
-    while (changed) {
-      changed = false;
-      root.querySelectorAll('p,div,h1,h2,h3,h4,h5,h6').forEach(el => {
-        const inner = el.innerHTML.replace(/&nbsp;/gi, '').trim();
-        if (!inner) { el.parentNode && el.parentNode.removeChild(el); changed = true; }
+  function cleanHTML(input, config) {
+    const doc = new DOMParser().parseFromString(input || '', 'text/html');
+    const root = doc.body;
+
+    for (const el of Array.from(root.querySelectorAll('*')).reverse()) {
+      if (forbiddenTags.has(el.tagName.toLowerCase())) el.remove();
+    }
+    // Comments are removed without affecting text or table cells.
+    if (config.removeComments) {
+      const iterator = doc.createNodeIterator(root, NodeFilter.SHOW_COMMENT);
+      const comments = [];
+      let node;
+      while ((node = iterator.nextNode())) comments.push(node);
+      comments.forEach(comment => comment.remove());
+    }
+    if (config.semanticTags) {
+      root.querySelectorAll('[style]').forEach(el => {
+        const style = el.getAttribute('style') || '';
+        const tags = [];
+        if (/font-weight\s*:\s*(bold|[7-9]00)\b/i.test(style)) tags.push('strong');
+        if (/font-style\s*:\s*italic\b/i.test(style)) tags.push('em');
+        if (/text-decoration(?:-line)?\s*:[^;]*underline/i.test(style)) tags.push('u');
+        if (/text-decoration(?:-line)?\s*:[^;]*line-through/i.test(style)) tags.push('s');
+        if (tags.length && el.childNodes.length) {
+          let children = Array.from(el.childNodes);
+          for (const tag of tags) {
+            const wrapper = doc.createElement(tag);
+            children.forEach(child => wrapper.appendChild(child));
+            el.appendChild(wrapper);
+            children = [wrapper];
+          }
+        }
       });
+      root.querySelectorAll('b').forEach(el => replaceTag(el, 'strong', doc));
+      root.querySelectorAll('i').forEach(el => replaceTag(el, 'em', doc));
     }
-  }
-
-  let out = root.innerHTML.trim();
-  out = out.replace(/(\s*&nbsp;\s*)+/g, ' ').trim();
-  return out;
-}
-
-// ─────────────────────────────────────────────────
-// Toolbar formatting
-// ─────────────────────────────────────────────────
-function fmt(cmd, value) {
-  editor.focus();
-  document.execCommand(cmd, false, value || null);
-  onEditorChange();
-}
-
-function applyBlock(tag) {
-  editor.focus();
-  document.execCommand('formatBlock', false, tag);
-  onEditorChange();
-}
-
-function insertLink() {
-  const url = prompt('Enter URL:', 'https://');
-  if (url) fmt('createLink', url);
-}
-
-function insertTable() {
-  const rows = parseInt(prompt('Number of rows:', '3') || '0');
-  const cols = parseInt(prompt('Number of columns:', '3') || '0');
-  if (!rows || !cols) return;
-
-  let html = '<table><thead><tr>';
-  for (let c = 0; c < cols; c++) html += `<th>Header ${c + 1}</th>`;
-  html += '</tr></thead><tbody>';
-  for (let r = 0; r < rows - 1; r++) {
-    html += '<tr>';
-    for (let c = 0; c < cols; c++) html += '<td>&nbsp;</td>';
-    html += '</tr>';
-  }
-  html += '</tbody></table><p><br></p>';
-
-  document.execCommand('insertHTML', false, html);
-  onEditorChange();
-}
-
-function updateToolbarState() {
-  const sel = window.getSelection();
-  if (!sel || !sel.rangeCount)           return;
-  if (!editor.contains(sel.anchorNode)) return;
-
-  let node = sel.anchorNode;
-  while (node && node !== editor) {
-    const tag     = node.nodeName && node.nodeName.toLowerCase();
-    const fmtSel  = document.getElementById('blockFormat');
-    const match   = Array.from(fmtSel.options).find(o => o.value === tag);
-    if (match) { fmtSel.value = tag; break; }
-    node = node.parentNode;
-  }
-}
-
-// ─────────────────────────────────────────────────
-// Attribute chips (sidebar)
-// ─────────────────────────────────────────────────
-function renderAttrChips() {
-  document.getElementById('attrChips').innerHTML = allowedAttrs
-    .map((a, i) => `<span class="chip">${a}<button onclick="removeAttr(${i})">×</button></span>`)
-    .join('');
-}
-
-function addAttr() {
-  const inp = document.getElementById('attrInput');
-  inp.value.split(',').map(v => v.trim().toLowerCase()).filter(Boolean).forEach(v => {
-    if (!allowedAttrs.includes(v)) allowedAttrs.push(v);
-  });
-  inp.value = '';
-  renderAttrChips();
-}
-
-function removeAttr(i) {
-  allowedAttrs.splice(i, 1);
-  renderAttrChips();
-}
-
-function updateAttrUI() {
-  const mode = document.getElementById('attrMode').value;
-  document.getElementById('attrListWrap').style.display =
-    (mode === 'remove-all' || mode === 'none') ? 'none' : '';
-  document.getElementById('attrListLabel').textContent =
-    mode === 'blocklist' ? 'Blocked attrs:' : 'Allowed attrs:';
-}
-
-// ─────────────────────────────────────────────────
-// Pretty print
-// ─────────────────────────────────────────────────
-function prettyHTML(html) {
-  const voids = new Set([
-    'area','base','br','col','embed','hr','img','input',
-    'link','meta','param','source','track','wbr'
-  ]);
-  const inlineTags = new Set([
-    'a','abbr','acronym','b','bdo','big','br','button','cite','code','dfn',
-    'em','i','img','input','kbd','label','map','object','output','q','samp',
-    'select','small','span','strong','sub','sup','textarea','time','tt','u','var'
-  ]);
-
-  let out = '', depth = 0;
-  const re = /(<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!--[\s\S]*?-->|<[^>]+>|[^<]+)/gi;
-  let m;
-
-  while ((m = re.exec(html))) {
-    const tok      = m[0].trim();
-    if (!tok) continue;
-    const tag      = (tok.match(/^<\/?([a-zA-Z][a-zA-Z0-9]*)/) || [])[1] || '';
-    const isInline = inlineTags.has(tag.toLowerCase());
-
-    if (tok.startsWith('<!--')) {
-      out += '  '.repeat(depth) + tok + '\n';
-    } else if (tok.startsWith('</')) {
-      depth = Math.max(0, depth - 1);
-      out += '  '.repeat(depth) + tok + '\n';
-    } else if (tok.startsWith('<')) {
-      out += '  '.repeat(depth) + tok + '\n';
-      if (!voids.has(tag.toLowerCase()) && !tok.endsWith('/>') && !isInline) depth++;
-    } else {
-      const t = tok.replace(/\s+/g, ' ');
-      if (t) out += '  '.repeat(depth) + t + '\n';
+    if (config.unwrapDivSpan) {
+      Array.from(root.querySelectorAll('div,span')).reverse().forEach(unwrap);
     }
+    root.querySelectorAll('*').forEach(el => {
+      if (config.stripMso && el.hasAttribute('style')) {
+        const kept = (el.getAttribute('style') || '').split(';')
+          .filter(rule => rule.trim() && !/^mso-/i.test(rule.trim())).join(';').trim();
+        if (kept) el.setAttribute('style', kept);
+        else el.removeAttribute('style');
+      }
+      for (const attr of Array.from(el.attributes)) {
+        const name = attr.name.toLowerCase();
+        const value = attr.value;
+        // Mandatory safeguards: optional attribute modes cannot override these.
+        let remove = name.startsWith('on') || ((name === 'href' || name === 'src' || name === 'xlink:href' || name === 'formaction') && dangerousUrl.test(value));
+        if (!structuralAttrs.has(name)) {
+          if (config.attrMode === 'remove-all') remove = true;
+          if (config.attrMode === 'allowlist' && !config.allowedAttrs.has(name)) remove = true;
+          if (config.attrMode === 'blocklist' && config.allowedAttrs.has(name)) remove = true;
+        }
+        if (config.stripClass && name === 'class') remove = true;
+        if (config.stripStyle && name === 'style') remove = true;
+        if (config.removeData && name.startsWith('data-')) remove = true;
+        if (remove) el.removeAttribute(attr.name);
+      }
+    });
+    if (config.collapseEmpty) {
+      for (const el of Array.from(root.querySelectorAll(emptyBlockTags)).reverse()) {
+        const hasMeaningfulChild = el.querySelector('img,table,ul,ol,hr,video,audio');
+        if (!hasMeaningfulChild && !el.textContent.replace(/\u00a0/g, ' ').trim()) el.remove();
+      }
+    }
+    // Remove only CKEditor's table-specific figure wrapper in export HTML.
+    // Other figure types are retained.
+    return unwrapTableFigures(root.innerHTML.trim());
   }
-  return out.trim();
-}
 
-// ─────────────────────────────────────────────────
-// Utility
-// ─────────────────────────────────────────────────
-function swapTag(el, newTagName, doc) {
-  if (!el.parentNode) return;
-  const newEl = doc.createElement(newTagName);
-  Array.from(el.attributes).forEach(a => newEl.setAttribute(a.name, a.value));
-  while (el.firstChild) newEl.appendChild(el.firstChild);
-  el.parentNode.replaceChild(newEl, el);
-}
+  // Display-only pretty printer. It does not strip attributes or change text.
+  // Inline content, whitespace-sensitive content and mixed-content elements
+  // are kept on one line to avoid changing their visible spacing.
+  function prettyHTML(html) {
+    if (!html || !html.trim()) return '';
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const blocks = new Set([
+      'address', 'article', 'aside', 'blockquote', 'details', 'div', 'dl', 'dt', 'dd',
+      'fieldset', 'figcaption', 'figure', 'footer', 'form', 'h1', 'h2', 'h3',
+      'h4', 'h5', 'h6', 'header', 'hr', 'li', 'main', 'nav', 'ol', 'p',
+      'section', 'summary', 'table', 'tbody', 'thead', 'tfoot', 'tr', 'td', 'th', 'ul'
+    ]);
+    const preserve = new Set(['pre', 'code', 'script', 'style', 'textarea']);
+    const voids = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img',
+      'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+    const indentation = level => '  '.repeat(level);
 
-function clearAll() {
-  editor.innerHTML  = '';
-  htmlSource.value  = '';
-  liveMode          = true;
-  document.getElementById('lineCount').textContent     = '—';
-  document.getElementById('wordCount').textContent     = '0 words';
-  document.getElementById('statRaw').textContent       = '—';
-  document.getElementById('statCleaned').textContent   = '—';
-  document.getElementById('statRed').textContent       = '—';
-  document.getElementById('modeTag').textContent       = 'live preview';
-}
+    // Detect the end of the opening tag without confusing a quoted > for its end.
+    function openingTag(element) {
+      const htmlText = element.outerHTML;
+      let quote = null;
+      for (let i = 1; i < htmlText.length; i++) {
+        const char = htmlText[i];
+        if (quote) { if (char === quote) quote = null; }
+        else if (char === '"' || char === "'") quote = char;
+        else if (char === '>') return htmlText.slice(0, i + 1);
+      }
+      return htmlText;
+    }
 
-function copyOutput() {
-  const text = htmlSource.value;
-  if (!text.trim()) return;
-  navigator.clipboard.writeText(text).then(() => {
-    const btn      = document.getElementById('copyBtn');
-    btn.textContent = '✓ Copied';
-    btn.style.color = 'var(--green)';
-    setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = ''; }, 1800);
-  });
-}
+    function serialize(node, level) {
+      if (node.nodeType === Node.COMMENT_NODE) {
+        return [indentation(level) + '<!--' + node.data + '-->'];
+      }
+      if (node.nodeType === Node.TEXT_NODE) {
+        // Keep text exactly as parsed: never collapse or trim meaningful text.
+        return [indentation(level) + node.textContent];
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return [];
+      const tag = node.tagName.toLowerCase();
+      const start = openingTag(node);
+      if (voids.has(tag)) return [indentation(level) + start];
+      if (preserve.has(tag)) return [indentation(level) + node.outerHTML];
+
+      const children = Array.from(node.childNodes);
+      const hasSignificantText = children.some(child => child.nodeType === Node.TEXT_NODE && child.textContent.length > 0);
+      const hasNonBlockChild = children.some(child => child.nodeType === Node.ELEMENT_NODE && !blocks.has(child.tagName.toLowerCase()));
+      const containsBlock = children.some(child => child.nodeType === Node.ELEMENT_NODE && blocks.has(child.tagName.toLowerCase()));
+
+      // Keep paragraphs, cells and mixed inline content intact on one line.
+      // This avoids introducing text nodes inside inline-rich content.
+      if (!containsBlock || hasSignificantText || hasNonBlockChild) {
+        return [indentation(level) + node.outerHTML];
+      }
+      const lines = [indentation(level) + start];
+      for (const child of children) {
+        if (child.nodeType === Node.TEXT_NODE && !child.textContent.trim()) continue;
+        lines.push(...serialize(child, level + 1));
+      }
+      lines.push(indentation(level) + '</' + tag + '>');
+      return lines;
+    }
+
+    const result = [];
+    for (const node of doc.body.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) continue;
+      result.push(...serialize(node, 0));
+    }
+    return result.join('\n');
+  }
+  return { optionsFromUI, cleanHTML, prettyHTML, unwrapTableFigures };
+})();

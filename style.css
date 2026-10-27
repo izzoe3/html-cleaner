@@ -374,3 +374,85 @@ select.full:focus { border-color: var(--accent2); }
   body { height: auto; overflow: auto; }
   .toolbar { flex-wrap: wrap; }
 }
+/* Primary editing workspace and expandable source panel */
+.main {
+  grid-template-columns: 220px minmax(360px, 2.5fr) minmax(260px, 1fr);
+  min-height: 0;
+}
+.main.source-expanded {
+  grid-template-columns: 220px minmax(280px, 1fr) minmax(420px, 2.6fr);
+}
+.panel { min-width: 0; }
+.editor-wrap { min-height: 0; }
+#editor { padding: 32px 38px; }
+.attr-list-label { font-size: 0.65rem; color: var(--muted); margin-top: 2px; }
+.panel-toggle { white-space: nowrap; }
+@media (max-width: 1100px) {
+  header { height: auto; min-height: 52px; flex-wrap: wrap; padding: 10px 16px; gap: 8px; }
+  .toolbar { flex-wrap: wrap; }
+  .main { grid-template-columns: 190px minmax(260px, 2fr) minmax(230px, 1fr); }
+  .main.source-expanded { grid-template-columns: 190px minmax(240px, 1fr) minmax(270px, 2fr); }
+}
+@media (max-width: 960px) {
+  .main, .main.source-expanded { grid-template-columns: minmax(0, 1fr); overflow: visible; }
+  .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+  .panel { min-height: 360px; }
+  .source-panel { min-height: 260px; }
+  .main.source-expanded .source-panel { min-height: 65vh; }
+  body { min-height: 100vh; height: auto; overflow: auto; }
+  #editor { padding: 24px; }
+}
+/* CKEditor 5 integration overrides */
+.brand { display: flex; flex-direction: column; gap: 1px; min-width: 190px; }
+.brand h1 { margin-right: 0; }
+.brand > span { color: var(--muted); font-size: .57rem; }
+header { justify-content: space-between; }
+.sidebar .sec-label:not(:first-child) { margin-top: 16px; }
+.field-label { display: block; color: var(--muted); font-size: .66rem; margin-bottom: 5px; }
+.help { font-size: .62rem; color: var(--muted); line-height: 1.5; margin-top: 6px; }
+.opt-row { cursor: pointer; font-size: .68rem; line-height: 1.4; }
+.opt-row input { accent-color: var(--accent); flex-shrink: 0; }
+[hidden] { display: none !important; }
+.editor-wrap { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.editor-wrap > .ck-editor { display: flex; flex: 1; flex-direction: column; min-height: 0; width: 100%; }
+.editor-wrap .ck-editor__top { flex-shrink: 0; }
+.editor-wrap .ck-editor__main { display: flex; flex: 1; min-height: 0; }
+.editor-wrap .ck-editor__editable_inline { min-height: 100%; width: 100%; overflow-y: auto; padding: 24px 32px !important; border: 0 !important; box-shadow: none !important; font-family: Georgia, 'Times New Roman', serif; font-size: .98rem; line-height: 1.7; }
+.editor-wrap .ck-content table { width: 100%; }
+.editor-wrap .ck-content .table table { border-collapse: collapse; }
+.editor-wrap .ck-content .table td, .editor-wrap .ck-content .table th { border: 1px solid var(--border2); padding: 8px; }
+#editor { min-height: 0; padding: 0; }
+#htmlSource { min-height: 0; }
+.source-note { background: var(--surface); color: var(--muted); font-size: .6rem; padding: 8px 12px; border-top: 1px solid var(--border); }
+@media (max-width: 960px) { .editor-wrap .ck-editor__editable_inline { min-height: 350px; } .source-panel textarea { min-height: 300px !important; } }
+
+/* V2: let CKEditor's full formatting toolbar occupy multiple rows. */
+.editor-wrap .ck.ck-toolbar {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+.editor-wrap .ck.ck-toolbar .ck-toolbar__items {
+  flex-wrap: wrap !important;
+  align-items: center;
+}
+.editor-wrap .ck.ck-toolbar .ck-button {
+  min-height: 28px;
+}
+
+/* V4: CKEditor wraps tables in figure.table. Stretch the wrapper so the
+   table does not appear narrowly centred when Word supplies small widths. */
+.editor-wrap .ck-content figure.table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 1em 0;
+  float: none;
+}
+.editor-wrap .ck-content figure.table > table {
+  width: 100% !important;
+  max-width: 100%;
+  margin: 0;
+  table-layout: auto;
+}
+#undoCleanBtn:disabled { opacity: .45; cursor: not-allowed; }
