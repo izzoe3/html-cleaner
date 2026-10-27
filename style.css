@@ -374,3 +374,31 @@ select.full:focus { border-color: var(--accent2); }
   body { height: auto; overflow: auto; }
   .toolbar { flex-wrap: wrap; }
 }
+/* Primary editing workspace and expandable source panel */
+.main {
+  grid-template-columns: 220px minmax(360px, 2.5fr) minmax(260px, 1fr);
+  min-height: 0;
+}
+.main.source-expanded {
+  grid-template-columns: 220px minmax(280px, 1fr) minmax(420px, 2.6fr);
+}
+.panel { min-width: 0; }
+.editor-wrap { min-height: 0; }
+#editor { padding: 32px 38px; }
+.attr-list-label { font-size: 0.65rem; color: var(--muted); margin-top: 2px; }
+.panel-toggle { white-space: nowrap; }
+@media (max-width: 1100px) {
+  header { height: auto; min-height: 52px; flex-wrap: wrap; padding: 10px 16px; gap: 8px; }
+  .toolbar { flex-wrap: wrap; }
+  .main { grid-template-columns: 190px minmax(260px, 2fr) minmax(230px, 1fr); }
+  .main.source-expanded { grid-template-columns: 190px minmax(240px, 1fr) minmax(270px, 2fr); }
+}
+@media (max-width: 960px) {
+  .main, .main.source-expanded { grid-template-columns: minmax(0, 1fr); overflow: visible; }
+  .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+  .panel { min-height: 360px; }
+  .source-panel { min-height: 260px; }
+  .main.source-expanded .source-panel { min-height: 65vh; }
+  body { min-height: 100vh; height: auto; overflow: auto; }
+  #editor { padding: 24px; }
+}

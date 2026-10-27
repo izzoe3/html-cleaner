@@ -5,6 +5,7 @@ let allowedAttrs = ['href','src','alt','title','width','height','target','rel','
 let liveMode = true;
 let debounceTimer = null;
 let htmlSyncTimer = null;
+let lastEditedPane = 'editor';
 
 // ─────────────────────────────────────────────────
 // Boot
@@ -21,14 +22,40 @@ editor.addEventListener('input', onEditorChange);
 htmlSource.addEventListener('input', onHtmlSourceChange);
 document.addEventListener('selectionchange', updateToolbarState);
 
-// Switch back to live mode on next WYSIWYG keystroke or paste
-editor.addEventListener('keydown', () => { liveMode = true; });
-editor.addEventListener('paste',   () => { setTimeout(() => { liveMode = true; showRawHTML(); }, 50); });
+// The contenteditable field owns editing shortcuts while focused.
+// Prevent browser actions such as bookmarks for Cmd/Ctrl+B.
+editor.addEventListener('keydown', handleEditorShortcuts);
+
+function handleEditorShortcuts(e) {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+  const key = e.key.toLowerCase();
+  const actions = { b: 'bold', i: 'italic', u: 'underline' };
+  if (actions[key] && !e.shiftKey) {
+    e.preventDefault();
+    fmt(actions[key]);
+  } else if (key === 'k' && !e.shiftKey) {
+    e.preventDefault();
+    insertLink();
+  }
+  // Leave undo/redo to the browser's native contenteditable history.
+}
+
+function toggleSourceExpand() {
+  const layout = document.getElementById('mainLayout');
+  const button = document.getElementById('expandSourceBtn');
+  const expanded = layout.classList.toggle('source-expanded');
+  button.textContent = expanded ? 'Restore ↔' : 'Expand ↔';
+  button.title = expanded ? 'Restore editor layout' : 'Expand HTML source panel';
+  button.setAttribute('aria-pressed', String(expanded));
+}
 
 // ─────────────────────────────────────────────────
 // Editor → HTML source  (left → right, live)
 // ─────────────────────────────────────────────────
 function onEditorChange() {
+  lastEditedPane = 'editor';
+  liveMode = true;
+  clearTimeout(htmlSyncTimer);
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     if (liveMode) showRawHTML();
@@ -52,7 +79,9 @@ function showRawHTML() {
 // HTML source → WYSIWYG  (right → left, on edit)
 // ─────────────────────────────────────────────────
 function onHtmlSourceChange() {
+  lastEditedPane = 'source';
   liveMode = false;
+  clearTimeout(debounceTimer);
   clearTimeout(htmlSyncTimer);
   htmlSyncTimer = setTimeout(() => {
     const html       = htmlSource.value;
@@ -60,7 +89,7 @@ function onHtmlSourceChange() {
     updateWordCount();
     updateLineCount(html);
     document.getElementById('modeTag').textContent = 'html edited';
-    setTimeout(() => { liveMode = true; }, 300);
+    // Remain in source-editing mode until the editor is changed.
   }, 400);
 }
 
@@ -82,6 +111,13 @@ function updateLineCount(text) {
 // Clean button
 // ─────────────────────────────────────────────────
 function runClean() {
+  // Flush pending source changes before cleaning, so a quick click on Clean
+  // cannot accidentally clean older content from the WYSIWYG editor.
+  clearTimeout(debounceTimer);
+  clearTimeout(htmlSyncTimer);
+  if (lastEditedPane === 'source') {
+    editor.innerHTML = htmlSource.value;
+  }
   const rawHTML = editor.innerHTML || '';
   if (!rawHTML.trim()) return;
 
@@ -105,6 +141,7 @@ function runClean() {
   updateWordCount();
 
   liveMode = false;
+  lastEditedPane = 'source';
 }
 
 // ─────────────────────────────────────────────────
@@ -255,8 +292,18 @@ function applyBlock(tag) {
 }
 
 function insertLink() {
+  // window.prompt can interrupt editor focus; remember the selection.
+  const selection = window.getSelection();
+  const savedRange = selection && selection.rangeCount && editor.contains(selection.anchorNode)
+    ? selection.getRangeAt(0).cloneRange() : null;
   const url = prompt('Enter URL:', 'https://');
-  if (url) fmt('createLink', url);
+  if (!url) return;
+  editor.focus();
+  if (savedRange) {
+    selection.removeAllRanges();
+    selection.addRange(savedRange);
+  }
+  fmt('createLink', url);
 }
 
 function insertTable() {
@@ -376,6 +423,9 @@ function swapTag(el, newTagName, doc) {
 }
 
 function clearAll() {
+  clearTimeout(debounceTimer);
+  clearTimeout(htmlSyncTimer);
+  lastEditedPane = 'editor';
   editor.innerHTML  = '';
   htmlSource.value  = '';
   liveMode          = true;

@@ -7,12 +7,10 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
 <header>
   <h1>HTML Cleaner</h1>
-
-  <div class="toolbar">
-    <select class="tb-select" id="blockFormat" onchange="applyBlock(this.value)">
+  <div class="toolbar" aria-label="Editor formatting toolbar">
+    <select class="tb-select" id="blockFormat" onchange="applyBlock(this.value)" aria-label="Block formatting">
       <option value="p">Paragraph</option>
       <option value="h1">Heading 1</option>
       <option value="h2">Heading 2</option>
@@ -20,40 +18,28 @@
       <option value="blockquote">Blockquote</option>
       <option value="pre">Preformatted</option>
     </select>
-
     <div class="tb-sep"></div>
-
-    <button class="tb-btn bold-btn"   onclick="fmt('bold')"          title="Bold">B</button>
-    <button class="tb-btn italic-btn" onclick="fmt('italic')"        title="Italic">I</button>
-    <button class="tb-btn"            onclick="fmt('underline')"     title="Underline"><u>U</u></button>
-    <button class="tb-btn"            onclick="fmt('strikeThrough')" title="Strikethrough"><s>S</s></button>
-
+    <button class="tb-btn bold-btn" onclick="fmt('bold')" title="Bold (⌘/Ctrl+B)">B</button>
+    <button class="tb-btn italic-btn" onclick="fmt('italic')" title="Italic (⌘/Ctrl+I)">I</button>
+    <button class="tb-btn" onclick="fmt('underline')" title="Underline (⌘/Ctrl+U)"><u>U</u></button>
+    <button class="tb-btn" onclick="fmt('strikeThrough')" title="Strikethrough"><s>S</s></button>
     <div class="tb-sep"></div>
-
     <button class="tb-btn" onclick="fmt('insertUnorderedList')" title="Bullet list">≡ UL</button>
-    <button class="tb-btn" onclick="fmt('insertOrderedList')"   title="Numbered list">≡ OL</button>
-
+    <button class="tb-btn" onclick="fmt('insertOrderedList')" title="Numbered list">≡ OL</button>
     <div class="tb-sep"></div>
-
-    <button class="tb-btn" onclick="insertLink()"  title="Insert link">🔗</button>
+    <button class="tb-btn" onclick="insertLink()" title="Insert link (⌘/Ctrl+K)">🔗</button>
     <button class="tb-btn" onclick="insertTable()" title="Insert table">⊞</button>
-
     <div class="tb-sep"></div>
-
     <button class="tb-btn" onclick="fmt('removeFormat')" title="Remove formatting">✕ fmt</button>
   </div>
-
   <div class="header-right">
-    <button class="btn btn-ghost"   onclick="clearAll()">Clear</button>
+    <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
     <button class="btn btn-primary" id="cleanBtn" onclick="runClean()">Clean ▶</button>
   </div>
 </header>
 
-<div class="main">
-
-  <!-- ── SIDEBAR ── -->
+<div class="main" id="mainLayout">
   <aside class="sidebar">
-
     <div>
       <div class="sec-label">Attributes</div>
       <div class="card">
@@ -64,103 +50,58 @@
           <option value="none">No change</option>
         </select>
         <div id="attrListWrap">
-          <div style="font-size:0.65rem; color:var(--muted); margin-top:2px;" id="attrListLabel">Allowed attrs:</div>
+          <div class="attr-list-label" id="attrListLabel">Allowed attrs:</div>
           <div class="chips" id="attrChips"></div>
           <div class="tag-input-wrap">
-            <input type="text" id="attrInput" placeholder="href, src…" />
-            <button onclick="addAttr()">+</button>
+            <input type="text" id="attrInput" placeholder="href, src…" aria-label="Add attributes">
+            <button onclick="addAttr()" aria-label="Add attributes">+</button>
           </div>
         </div>
       </div>
     </div>
-
     <div>
       <div class="sec-label">Word / Paste</div>
       <div class="card">
-        <div class="opt-row">
-          <label class="lbl">Strip mso-* styles</label>
-          <label class="tog"><input type="checkbox" id="stripMso" checked><span class="sl"></span></label>
-        </div>
-        <div class="opt-row">
-          <label class="lbl">Remove class attrs</label>
-          <label class="tog"><input type="checkbox" id="stripClass" checked><span class="sl"></span></label>
-        </div>
-        <div class="opt-row">
-          <label class="lbl">Remove inline styles</label>
-          <label class="tog"><input type="checkbox" id="stripStyle" checked><span class="sl"></span></label>
-        </div>
-        <div class="opt-row">
-          <label class="lbl">Remove empty &lt;p&gt;</label>
-          <label class="tog"><input type="checkbox" id="collapseEmpty" checked><span class="sl"></span></label>
-        </div>
-        <div class="opt-row">
-          <label class="lbl">Unwrap &lt;div&gt; &amp; &lt;span&gt;</label>
-          <label class="tog"><input type="checkbox" id="unwrapDivSpan" checked><span class="sl"></span></label>
-        </div>
-        <div class="opt-row">
-          <label class="lbl">&lt;b&gt;/&lt;i&gt; → strong/em</label>
-          <label class="tog"><input type="checkbox" id="semanticTags" checked><span class="sl"></span></label>
-        </div>
+        <div class="opt-row"><label class="lbl" for="stripMso">Strip mso-* styles</label><label class="tog"><input type="checkbox" id="stripMso" checked><span class="sl"></span></label></div>
+        <div class="opt-row"><label class="lbl" for="stripClass">Remove class attrs</label><label class="tog"><input type="checkbox" id="stripClass" checked><span class="sl"></span></label></div>
+        <div class="opt-row"><label class="lbl" for="stripStyle">Remove inline styles</label><label class="tog"><input type="checkbox" id="stripStyle" checked><span class="sl"></span></label></div>
+        <div class="opt-row"><label class="lbl" for="collapseEmpty">Remove empty &lt;p&gt;</label><label class="tog"><input type="checkbox" id="collapseEmpty" checked><span class="sl"></span></label></div>
+        <div class="opt-row"><label class="lbl" for="unwrapDivSpan">Unwrap &lt;div&gt; &amp; &lt;span&gt;</label><label class="tog"><input type="checkbox" id="unwrapDivSpan" checked><span class="sl"></span></label></div>
+        <div class="opt-row"><label class="lbl" for="semanticTags">&lt;b&gt;/&lt;i&gt; → strong/em</label><label class="tog"><input type="checkbox" id="semanticTags" checked><span class="sl"></span></label></div>
       </div>
     </div>
-
     <div>
       <div class="sec-label">General</div>
       <div class="card">
-        <div class="opt-row">
-          <label class="lbl">Remove comments</label>
-          <label class="tog"><input type="checkbox" id="removeComments" checked><span class="sl"></span></label>
-        </div>
-        <div class="opt-row">
-          <label class="lbl">Remove event handlers</label>
-          <label class="tog"><input type="checkbox" id="removeEvents" checked><span class="sl"></span></label>
-        </div>
-        <div class="opt-row">
-          <label class="lbl">Remove data-* attrs</label>
-          <label class="tog"><input type="checkbox" id="removeData" checked><span class="sl"></span></label>
-        </div>
-        <div class="opt-row">
-          <label class="lbl">Pretty print</label>
-          <label class="tog"><input type="checkbox" id="prettyPrint" checked><span class="sl"></span></label>
-        </div>
+        <div class="opt-row"><label class="lbl" for="removeComments">Remove comments</label><label class="tog"><input type="checkbox" id="removeComments" checked><span class="sl"></span></label></div>
+        <div class="opt-row"><label class="lbl" for="removeEvents">Remove event handlers</label><label class="tog"><input type="checkbox" id="removeEvents" checked><span class="sl"></span></label></div>
+        <div class="opt-row"><label class="lbl" for="removeData">Remove data-* attrs</label><label class="tog"><input type="checkbox" id="removeData" checked><span class="sl"></span></label></div>
+        <div class="opt-row"><label class="lbl" for="prettyPrint">Pretty print</label><label class="tog"><input type="checkbox" id="prettyPrint" checked><span class="sl"></span></label></div>
       </div>
     </div>
-
   </aside>
 
-  <!-- ── WYSIWYG EDITOR ── -->
-  <div class="panel">
+  <section class="panel editor-panel" aria-label="Rich text editor">
     <div class="panel-header">
       <h3>Editor — WYSIWYG</h3>
-      <div class="panel-actions">
-        <span class="badge" id="wordCount">0 words</span>
-      </div>
+      <div class="panel-actions"><span class="badge" id="wordCount">0 words</span></div>
     </div>
     <div class="editor-wrap">
-      <div
-        id="editor"
-        contenteditable="true"
-        data-placeholder="Paste or type here — Word tables, rich text, plain text all welcome…"
-      ></div>
+      <div id="editor" contenteditable="true" role="textbox" aria-label="Rich text editor" aria-multiline="true" data-placeholder="Paste or type here — Word tables, rich text, plain text all welcome…"></div>
     </div>
-  </div>
+  </section>
 
-  <!-- ── HTML SOURCE ── -->
-  <div class="panel">
+  <section class="panel source-panel" aria-label="HTML source">
     <div class="panel-header">
       <h3>HTML Source — editable</h3>
       <div class="panel-actions">
         <span class="badge" id="lineCount">—</span>
+        <button class="btn btn-ghost panel-toggle" id="expandSourceBtn" onclick="toggleSourceExpand()" aria-pressed="false" title="Expand HTML source panel">Expand ↔</button>
         <button class="btn btn-ghost" id="copyBtn" onclick="copyOutput()">Copy</button>
       </div>
     </div>
-    <textarea
-      id="htmlSource"
-      placeholder="// HTML appears here as you type or paste…"
-      spellcheck="false"
-    ></textarea>
-  </div>
-
+    <textarea id="htmlSource" aria-label="Editable HTML source" placeholder="// HTML appears here as you type or paste…" spellcheck="false"></textarea>
+  </section>
 </div>
 
 <div class="statusbar">
@@ -169,7 +110,6 @@
   <span>Reduction: <b id="statRed">—</b></span>
   <span class="mode-tag" id="modeTag">live preview</span>
 </div>
-
 <script src="cleaner.js"></script>
 </body>
 </html>
